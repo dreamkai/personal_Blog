@@ -23,6 +23,7 @@ module.exports = {
         '/accumulate/': [
           '',     
           'guide', 
+          'webpack'
         ],
         '/': [
           '',        /* / */
