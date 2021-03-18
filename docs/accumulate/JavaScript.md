@@ -7,6 +7,7 @@ sidebarDepth: 2
 
 ###  1. js组成
 
+
 * ECMAScript
 * 文档对象模型(DOM)
 * 浏览器对象模型(BOM)
