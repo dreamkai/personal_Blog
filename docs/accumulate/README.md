@@ -1,4 +1,4 @@
-# 前端知识
+# JavaScript
 
 ## ES6
 
