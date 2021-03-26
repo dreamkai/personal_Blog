@@ -191,10 +191,10 @@ while(i < arr.length){
      return result
  }
 
- Function.prototype.bind = function bind(){
+ Function.prototype.bind = function bind(context,params){
      let self = this
-     return function proxy(){
-       self.apply(context,params);  
+     return function proxy(...arg){
+       self.apply(context,params.concat(args));  
      }
  }
 
@@ -392,3 +392,227 @@ Link: </styles.css>; rel=preload; as=style, </example.png>; rel=preload; as=imag
 - HTTP/1.1 「长连接」 若干个请求排队串行化单线程处理，后面的请求等待前面请求的返回才能获得执行机会，一旦有某请求超时等，后续请求只能被阻塞，毫无办法，也就是人们常说的线头阻塞；
 - HTTP/2.0 「多路复用」多个请求可同时在一个连接上并行执行，某个请求任务耗时严重，不会影响到其它连接的正常执行；
 ```
+
+### 五. 拷贝
+
+#### 1.数字浅拷贝
+
+1. 结合扩展运算符 let newArr = [...arr]
+2. newArr = arr.concat([])
+3. newArr = arr.slice()
+
+#### 2.对象的浅拷贝
+1. 结合扩展运算符 let newObj= {...obj}
+2. newObj = Object.assign({},obj)
+3. 自己for in 循环不支持对Symbol的遍历(1和2可以)
+
+::: tip 提示
+  Object.keys(obj)只能获取非symbol属性
+  Object.getOwnPropertySymbol(obj)只能获取symbol属性
+  二者可以结合
+:::
+
+```js
+  
+//toType 函数
+ (function(){
+   var class2type = {};
+   var toString = class2type.toString; //=> Object.prototype.toString
+   //设定数据类型的映射表
+   ["Boolean","Number","String","Function","Array","Date","RegExp","Object","Error","Symbol"].forEach(name =>{
+       class2type[`[object${name}`] = name.toLowerCase();
+   }),
+
+   function toType(){
+    if(obj == null){
+        return obj + ""
+    }
+    return typeof obj === "object" || typeof obj === "function" ? 
+        class2type[toString.call(obj)] || "object" : typeof obj
+    }
+
+    window.toType = toType
+ })()
+
+
+    // 检测是否为数据或者类数组
+    const isArrayLike = function isArrayLike(obj) {
+        let length = !!obj && "length" in obj && obj.length,
+            type = toType(obj);
+        if (isFunction(obj) || isWindow(obj)) return false;
+        return type === "array" || length === 0 ||
+            typeof length === "number" && length > 0 && (length - 1) in obj;
+    }
+
+    // 遍历数组/类数组/对象
+    const each = function each(obj, callback) {
+        callback = callback || Function.prototype;
+        if (isArrayLike(obj)) {
+            for (let i = 0; i < obj.length; i++) {
+                let item = obj[i],
+                    result = callback.call(item, item, i);
+                if (result === false) break;
+            }
+            return obj;
+        }
+        for (let key in obj) {
+            if (!hasOwn.call(obj, key)) break;
+            let item = obj[key],
+                result = callback.call(item, item, key);
+            if (result === false) break;
+        }
+        return obj;
+    };
+
+
+
+
+
+
+// 浅克隆
+
+function shallowClone(obj) {
+    let type = _.toType(obj),
+        Ctor = obj.constructor;
+
+    // 对于Symbol/BigInt
+    if (/^(symbol|bigint)$/i.test(type)) return Object(obj);
+
+    // 对于正则/日期的处理
+    if (/^(regexp|date)$/i.test(type)) return new Ctor(obj);
+
+    // 对于错误对象的处理 
+    if (/^error$/i.test(type)) return new Ctor(obj.message);
+
+    // 对于函数
+    if (/^function$/i.test(type)) {
+        // 返回新函数：新函数执行还是把原始函数执行，实现和原始函数相同的效果
+        return function () {
+            return obj.call(this, ...arguments);
+        };
+    }
+
+    // 数组或者对象
+    if (/^(object|array)$/i.test(type)) {
+        let keys = [...Object.keys(obj), ...Object.getOwnPropertySymbols(obj)],
+            result = new Ctor();
+        _.each(keys, key => {
+            result[key] = obj[key];
+        });
+        return result;
+        /* let result = new Ctor();
+        _.each(obj, (_, key) => {
+            result[key] = obj[key];
+        });
+        return result; */
+
+        /* // Symbol属性
+        return type === "array" ? [...obj] : {
+            ...obj
+        }; */
+    }
+
+    return obj;
+}
+
+
+// 深克隆：只要有下一级的，我们就克隆一下（浅克隆）
+function deepClone(obj, cache = new Set()) {
+    let type = _.toType(obj),
+        Ctor = obj.constructor;
+    if (!/^(object|array)$/i.test(type)) return shallowClone(obj);
+
+    // 避免无限套娃
+    if (cache.has(obj)) return obj;
+    cache.add(obj);
+    
+    let keys = [
+            ...Object.keys(obj),
+            ...Object.getOwnPropertySymbols(obj)
+        ],
+        result = new Ctor();
+    _.each(keys, key => {
+        // 再次调用deepClone的时候把catch传递进去，保证每一次递归都是一个cache
+        result[key] = deepClone(obj[key], cache);
+    });
+    return result;
+}
+```
+
+### 六. 基于浅比较实现的对象的合并
+
+```js
+/* 
+ * 几种情况的分析
+ *   A->options中的key值  B->params中的key值
+ *   1.A&B都是原始值类型:B替换A即可
+ *   2.A是对象&B是原始值:抛出异常信息
+ *   3.A是原始值&B是对象:B替换A即可
+ *   4.A&B都是对象:依次遍历B中的每一项,替换A中的内容
+ */
+// params替换options
+function isObj(value) {
+    // 是否为普通对象
+    return _.toType(value) === "object";
+}
+
+function merge(options, params = {}) {
+    _.each(params, (_, key) => {
+        let isA = isObj(options[key]),
+            isB = isObj(params[key]);
+        if (isA && !isB) throw new TypeError(`${key} in params must be object`);
+        if (isA && isB) {
+            options[key] = merge(options[key], params[key]);
+            return;
+        }
+        options[key] = params[key];
+    });
+    return options;
+}
+
+
+```
+
+### 7.AOP切面编程
+
+* 它所面对的是处理过程中的某个步骤或阶段，以获得逻辑过程中各部分之间低耦合性的隔离效果(目的是降低耦合)。
+   具体到实现来说就是通过动态的方式将非主关注点部分插入到主关注点(一般是业务逻辑中)
+
+``` js
+Function.prototype.before = function before(callback){
+    if( typeof callback != "function") throw new TypeError('callback must be function')
+    //this => fun
+    let _self = this
+    return function proxy(...params){
+      callback.call(this,...params)
+      return _self.call(this,...params)
+    } 
+}
+
+Function.prototype.after = function after(callback){
+  if(! typeof callback != "function") throw new TypeError('callback must be function')
+  let _self = this
+  return function proxy(...params){
+     let res = _self.call(this,...params)
+       callback.call(this,...params)
+     return res
+  }
+}
+
+
+let fun = () =>{
+    console.log('function')
+}
+func.before(() => {
+    console.log('===before===');
+}).after(() =>{
+    console.log('===after===');
+})()
+
+```
+
+
+### 八. 前端设计模式哦
+
+#### 1.单例模式
+* 基于单独的实例,来管理某一个模块中的内容,实现模块之间的独立划分[但是也可以通过模块之间方法的相互调用]
