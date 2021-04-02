@@ -762,3 +762,65 @@ sub1.subscribe(function(){
 ```
 
 ### 九. 基于 Ajax 的并发请求
+
+* 日常实现一个通过promise实现控制实现返回数据
+
+```js
+  const delay = function delay(interval){
+      return new Promsie((resolve,reject) = >{
+          setTimeout(() => {
+            resolve(interval)  
+          },interval)
+      })
+  } 
+
+  let tasks = [
+    ()=>{
+        return delay(1000)
+    },
+     ()=>{
+        return delay(1001)
+    },
+      ()=>{
+        return delay(1002)
+    },
+  ]
+  Promise.all(tasks.map(item =>{
+    item()
+  })).then(res=>{
+      console.log(res)
+  })
+
+```
+
+* js实现ajax并发请求的方案解决
+
+```js
+function createRequest(tasks,pool){
+    pool = pool || 5;
+    let result = []
+    together = new Array(popl).fill(null)
+    index = 0
+    together =  together.map(() =>{
+        return new Promise((resolve,reject) =>{
+            const run = function run(){
+                if(index >= tasks.length){
+                    resolve()
+                    return;
+                }
+                let old_index = index,
+                 task = tasks[index++]
+                 task().then(result =>{
+                     result[old_index] = result;
+                     //继续执行到下个循环
+                     run()
+                 }).catch(e =>{
+                     reject(e)
+                 })
+            }
+            run()
+        })
+    })
+    return Promise.all(together).then((results) =>results)
+}
+```
