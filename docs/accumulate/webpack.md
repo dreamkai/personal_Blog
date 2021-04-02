@@ -1,5 +1,5 @@
 ---
-title: webpack相关分享
+title: webpack&&脚手架相关分享
 sidebarDepth: 2
 ---
 
@@ -173,4 +173,127 @@ export default{
 :disappointed: 日常正则匹配一定要处理好,否则全局图片崩盘,到时候就爽歪歪咯
 :::
 
+
+## webpack 学习
+
+### 1.安装
+初始化:npm init
+
+```js
+ npm install webpack webpack-cli -D
+```
+
+### 2.指定打包入口和出口
+#### 2.1 同级下创建webpack.config.js
+
+* <font color="red">entry</font>:指定打包文件的入口
+* <font color="red">output</font>:指定打包生成文件的出口
+
+```js
+ const { resolve } = require('path');
+ const path = require('path');
+
+  module.exports = {
+      mode:'development' //可以实现打包代码不压缩
+      entry:'./src/index.js',
+      output:{
+          path:resolve(__dirname,'dist'),//输出文件夹的绝对路径
+      },
+}
+```
+
+
+### 3.使用loader
+* webpack只能理解js和json文件
+* loader让webpack能处理其他类型的文件,并将他们转换成有效的模块,以供程序使用,以及被添加到依赖图中
+
+```js
+module:{
+  rules:[
+    {test:/.txt$/,use:'raw-loader}
+  ]
+}
+```
+
+### 4.使用插件plugin
+#### 4.1 安装
+
+```js
+ npm install html-webpack-plugin  -D
+
+```
+#### 4.2 使用
+```js
+ const HtmlWebpackPlugin = require('html-webpack-plugin')
+
+ plugins:[
+   new HtmlWebpackPlugin({
+     template:'./src/index.html'
+   })
+ ]
+
+```
+
+### 5.配置webpack-dev-server
+
+#### 5.1 安装
+```js
+ npm install webpack-dev-server  -D
+```
+
+#### 5.2 使用
+ * devServer会启动一个http服务器,把一个文件夹作为静态目录
+ * 为了提高性能,使用的内存文件系统
+  
+
+```js
+   devServer:{
+      contentBase:resolve(__dirname,'dist'),//output优先级更高内容路径,可以不需要
+      writeToDisk:true,//此选项可以生成一份打包文件写入硬盘里面
+      port:8080,
+      open:true,//自动打开浏览器
+      compress:false,//是否开启自动压缩
+      publicPath:'/'
+    },
+```
+
+* publicPath可以不需要,默认是/
+* contentBase正常不需要,会首先访问output
+
+
+### 6. 支持css
+
+#### 6.1 安装
+```js
+npm install css-loader style-loader  -D
+```
+#### 6.2 使用模块
+* css-loader用于处理import等语法文件引入
+* style-loader用于把style查到html,head的style里面
+
+```js
+module:{
+  rules:[
+    {rule:/\.css$/,use:['style-loader','css-loader']}
+  ]
+}
+
+```
+#### 6.3 支持sass和less
+
+
+```js
+npm install less less-loader node-sass sass-loader  -D
+```
+使用
+ * less-loader用于处理把less转成css
+```js
+module:{
+  rules:[
+    {rule:/\.less$/,use:['style-loader','css-loader','less-loader]},
+    {rule:/\.scss$/,use:['style-loader','css-loader','sass-loader]},
+  ]
+}
+
+```
 
