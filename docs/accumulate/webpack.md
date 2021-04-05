@@ -202,6 +202,16 @@ export default{
 }
 ```
 
+#### 2.2 path,publicPath,contentBase区别
+
+|   类别   |   配置名称  |  描述
+|:-------: |:-------:  |  :-------:| 
+| output | path | 指定输出到硬盘中的目录|
+| output| publicPath |  表示的是打包生成的index.html文件里面引入资源的前缀 |
+| devServer | publicPath | 主要用于开发环境访 问的路径, 表示的是打包生成静态文件所在的位置(若是devServer里面的publicPath没有设置,则会认为是output里面设置的publicPath的值),要保证和output publicPath一样 | 
+| devServer | contentBase | 用于配置提供额外静态文件内容的目录(不需要打包的内容,比如图片) | 
+
+
 
 ### 3.使用loader
 * webpack只能理解js和json文件
@@ -297,3 +307,171 @@ module:{
 
 ```
 
+### 7.支持图片
+
+* 在webpack中引入图片
+  - 通过import或者require引入图片
+  ```js
+    const logo = require('./logo.png')
+    const img = new Image()
+    img.src = logo //esModule:true;那logo.default才能获取图片
+    document.body.appendChild(img)
+  ```
+  - 通过静态文件目录,通过html引入,需要配置devServer.contentBase,不然只能读取打包后的文件了  resolve(__dirname,'static')
+  - 在css通过url引入图片.css-loader进行解析处理
+
+#### 7.1 安装
+  ```js
+  npm install file-loader url-loader html-loader -D
+  ```
+
+#### 7.2 使用
+
+```js
+
+module:{
+  rules:[
+    {rule:/\.(jpg|png|bmp)$/,use:[
+      {
+        loader:'file-loader',
+        options:{
+          name:'[hash:10].[ext]'//哈希取10位,保留拓展名
+          esModule:false,//不需要包装成es6模块
+          limit:32*1024 //如果图片小于limit,小于8k的话就会转成base64位内嵌到html中,否则行为和file-loader一样
+        }
+      }
+   
+  ]
+}
+
+```
+
+::: tip 提示
+ url-loader是对file-loader增强,多了一个选项limit<br>
+ url-loader内部依赖file-loader,所以会帮你安装<br>
+ 判断图片是不是大于limit,如果大于的话就会把工作交给file-loader处理,否则,就转成base64自己处理
+:::
+
+
+```js
+module:{
+  rules:[
+    {rule:/\.(jpg|png|bmp)$/,use:[
+      {
+        loader:'url-loader',
+        option:{
+          name:'[hash:10].[ext]'//哈希取10位,保留拓展名
+          esModule:false,//不需要包装成es6模块
+          limit:
+          
+        }
+      }
+   
+  ]
+}
+```
+
+### 8.支持js
+* babel-loader使用Babel和webpack转义js文件
+* <font color="blue">@babel/@babel/core</font>是Babel编译的核心包
+* <font color="blue">@babel/@babel/present-env</font>为每一个环境的预设
+* <font color="blue">@babel/plugin-proposal-decorators</font>把类和对象装饰器编译成ES5
+* <font color="blue">@babel/plugin-proposal-class-properties</font>转换静态类属性以及使用属性初始值语法声明的属性
+
+#### 8.1 使用
+
+```js
+ module:{
+   rules:[
+     {rule:/\.js$/,use:[
+      {
+        loader:'babel-loader',
+        options:{
+          presets:[
+             "@babel/preset-env",//可以转换js语法,转成低级语法
+          ]
+        }
+      }
+     ]}
+   ]
+ }
+
+```
+
+#### 8.2 babel-loader,babel/core,babel/preset-env的关系
+
+* babel-loader是一个函数
+  - babel-loader的作用是调用babelCore
+  - babelCore本身值提供一个过程管理功能,把源代码转换成抽象语法树,通过遍历和生成,它本身也不知道,具体要转换成什么语法,以及语法如何转换,这个只有babel/preset-env
+  - 预设是plugin插件的集合,里面有很多插件
+
+|   babel   |   说明  | 
+|:-------:|:-------:|
+| babel-loader | 负责调用babelCore |
+| babel/core | 把源代码转换成抽象语法树,通过babel/preset-env处理完后,再用es5语法树重新生成es5语法
+| babel/preset-env | 负责把es6转成es5语法树
+
+```js
+function loader(source){
+  let es5 = babelCore.transform(source)
+  return es5;
+}
+```
+
+#### 8.3 装饰器的使用
+
+```js
+ module:{
+   rules:[
+     {rule:/\.js$/,use:[
+      {
+        loader:'babel-loader',
+        options:{
+          presets:[
+             "@babel/preset-env",//可以转换js语法,转成低级语法
+          ],
+          plugins:[
+            ["@babel/plugin-proposal-class-properties",{legacy:true}]
+          ]
+        }
+      }
+     ]}
+   ]
+ }
+
+```
+
+#### 8.4 babel/polyfill
+
+* 用来解决低版本浏览器不能识别类似promise等语法
+
+```js
+ module:{
+   rules:[
+     {rule:/\.js$/,use:[
+      {
+        loader:'babel-loader',
+        options:{
+          presets:[
+            [
+              "@/babel/preset-env",{
+                useBuiltIns:'usage',//按需加载polyfill
+                corejs:{version:3},
+               targets:[
+                 chrome:'60',
+                 filefox:'60',
+                 ie:'9',
+                 .
+                 .
+                 .
+               ] 
+              }
+            ]
+          ]
+        }
+      }
+     ]}
+   ]
+ }
+
+```
