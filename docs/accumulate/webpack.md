@@ -284,7 +284,7 @@ npm install css-loader style-loader  -D
 ```js
 module:{
   rules:[
-    {rule:/\.css$/,use:['style-loader','css-loader']}
+    {test:/\.css$/,use:['style-loader','css-loader']}
   ]
 }
 
@@ -300,8 +300,8 @@ npm install less less-loader node-sass sass-loader  -D
 ```js
 module:{
   rules:[
-    {rule:/\.less$/,use:['style-loader','css-loader','less-loader]},
-    {rule:/\.scss$/,use:['style-loader','css-loader','sass-loader]},
+    {test:/\.less$/,use:['style-loader','css-loader','less-loader]},
+    {test:/\.scss$/,use:['style-loader','css-loader','sass-loader]},
   ]
 }
 
@@ -331,7 +331,7 @@ module:{
 
 module:{
   rules:[
-    {rule:/\.(jpg|png|bmp)$/,use:[
+    {test:/\.(jpg|png|bmp)$/,use:[
       {
         loader:'file-loader',
         options:{
@@ -356,7 +356,7 @@ module:{
 ```js
 module:{
   rules:[
-    {rule:/\.(jpg|png|bmp)$/,use:[
+    {test:/\.(jpg|png|bmp)$/,use:[
       {
         loader:'url-loader',
         option:{
@@ -374,7 +374,7 @@ module:{
 ### 8.支持js
 * babel-loader使用Babel和webpack转义js文件
 * <font color="blue">@babel/@babel/core</font>是Babel编译的核心包
-* <font color="blue">@babel/@babel/present-env</font>为每一个环境的预设
+* <font color="blue">@babel/@babel/present-env</font>为每一个环境的预设,只能转换js语法
 * <font color="blue">@babel/plugin-proposal-decorators</font>把类和对象装饰器编译成ES5
 * <font color="blue">@babel/plugin-proposal-class-properties</font>转换静态类属性以及使用属性初始值语法声明的属性
 
@@ -383,7 +383,7 @@ module:{
 ```js
  module:{
    rules:[
-     {rule:/\.js$/,use:[
+     {test:/\.js$/,use:[
       {
         loader:'babel-loader',
         options:{
@@ -423,7 +423,7 @@ function loader(source){
 ```js
  module:{
    rules:[
-     {rule:/\.js$/,use:[
+     {test:/\.js$/,use:[
       {
         loader:'babel-loader',
         options:{
@@ -441,14 +441,23 @@ function loader(source){
 
 ```
 
-#### 8.4 babel/polyfill
+#### 8.4 babel-polyfill和babel-runtime
 
-* 用来解决低版本浏览器不能识别类似promise等语法
+#### 8.4.1  babel-polyfill
+* Babel默认只能转换js语法,而不能转换新的API,比如Set,Map,Promise,Proxy等全局对象,还有全局对象方法比如Object.assign都不会转码
+* babel-polyfill是通过全局对象和内置对象的prototype实现的,缺点是全局空间污染
+* core-js  其实就是腻子包,可以补充缺失
+
+@babel/@babel/preset-env未环境预设
+* "useBuiltins:"false",不对polyfill做操作,如果引入@babel/polyfill,则全局引入
+* "useBuiltins:"entry",根据配置浏览器兼容,此时需要手动引入 import "core-ks/stable" import "regenerator-runtime/runtime"
+* "useBuiltins:"usage",实现按需加载,动态引入需要的语法
+
 
 ```js
  module:{
    rules:[
-     {rule:/\.js$/,use:[
+     {test:/\.js$/,use:[
       {
         loader:'babel-loader',
         options:{
@@ -457,7 +466,7 @@ function loader(source){
               "@/babel/preset-env",{
                 useBuiltIns:'usage',//按需加载polyfill
                 corejs:{version:3},
-               targets:[
+                 targets:[
                  chrome:'60',
                  filefox:'60',
                  ie:'9',
@@ -475,3 +484,353 @@ function loader(source){
  }
 
 ```
+
+#### 8.4.2  babel-runtime
+* Babel为解决全局空间污染的问题,提供了单独的包babel-runtime用于编译模块的工具函数
+* babel-runtime 更像是按需加载的表现
+* 需要手动引入
+
+```js
+npm install babel-runtime -D
+```
+
+
+```js
+ import Promise from "babel-runtime/core-js/promise"
+ const p = new Promise(()=>{
+
+ })
+
+
+```
+#### 8.4.3  babel-plugin-transform-runtime
+* 启用插件后,Babel就会使用babel-runtime函数
+* 插件能自动转换成require语法,指向为babel-runtime的应用
+* babel-plugin-transform-plugin 在使用api自动引入import babel-runtime里面polyfill
+  - 当我们使用async/await ,自动引入babel/runtime/regenerator
+  - 当我们使用ES6静态事件或者内置对象,自动引入babel-runtim/core-js
+  - 移除内里看babel helpers替换使用babel-runtime/helpers
+
+安装
+
+```js
+ npm install @babel/runtime-corejs2 -D
+
+```
+
+使用
+
+```js
+module:{
+  rules:[
+    {
+      test:/\.js$/,use:[
+        {
+          loader:'babel-loader',
+          options:{
+            presets:[
+              [
+                "@babel/preset-env",{
+                  useBuiltIns:"usage",
+                  corejs:{version:3},
+                }
+              ]
+            ],
+            plugins:[
+             ["babel-plugin-transform-runtime',{
+               corejs:3,
+               helpers:true, //是否提取类的模块继承方法
+               regenerator:true
+             }]
+            ]   
+          }
+        }
+      ]
+    }
+  ]
+}
+
+::: tip 提示
+
+babel-runtime更适合在类库和组件使用,而babel-polyfill适合业务项目使用
+
+
+:::
+
+
+
+```
+
+### 9. ESlint代码校验
+
+#### 9.1 安装
+```js
+ npm install eslint eslint-loader babel-eslint -D
+
+```
+
+#### 9.2 使用
+
+```js
+ module:{
+   rules:[
+     {
+       test:/\.js$/,
+       use:'eslint-loader',
+       enforce:'pre', //强制执行顺序
+       options:{fix:true}//强制修复
+       exclude:/node_module/ //不需要检查
+       include:resolve(__dirname,'src) //包含
+      }
+   ]
+ }
+```
+
+
+#### 9.3 使用插件airbnb增加校验配置
+
+新建文件.eslint.js
+
+```js
+module.exports = {
+  parser:"babel-eslint",//解析器帮助我们把源代码转成抽象语法树
+  extends:'airbnb',
+  parserOption:{
+    sourceType:"module",
+    ecmaVersion:2015
+  }
+  env:{
+    browser:true
+  },
+  rules:{
+    ;;;
+  }
+  ]
+}
+
+```
+
+
+### 10. sourcemap代码调试
+
+* sourcemap是为了解决开发代码与实际代码不一致帮助我们debug到原始代码的技术
+* webpack 通过配置可以给我们自动生成source maps文件,map 文件是一种对应编译文件和源文件的方法
+
+
+|   类型   |   含义  | 
+|:-------:|:-------:|
+| source-map | 原始代码 最好的sourcemap质量,有完整的结果,单独在外部生成完整的sourcemap文件,并且在目标文件简历关联,能提示错误代码和定位准确位置,构建慢 |
+|inline-source-map| 以base64格式内联在打包文件中,内敛构建速度更快,也能提示错误代码和准确位置 |
+| eval-source-map | 每个某块单独生产一个单独的soucemap文件内联,并且使用eval执行,方便缓存,编译更快,重构构建快 |
+| cheap-module-eval-source-map| 原始代码(只有行内)同样道理,但是最高的质量和最低的性能 | 
+| cheap-eval-source-map| 转换代码(行内)每个模块被eval执行,并且sourcemap作为eval的一个default | 
+| eval| 生成代码,每个模块都被eval执行,并且存下@sourceURL,带eval 模式构建模式能cache SourceMap | 
+| cheap-source-map| 转换代码(行内)生成的sourcemap没有列映射,从loaders生产的sourcemap没有被使用 | 
+| cheap-module-source-map| 原始代码(只有行内),与上面一样除了每行特点的从loader进行映射 | 
+
+只是下面五个关键词的组合
+
+|  关键词  |   含义  | 
+|:-------:|:-------:|
+| eval|使用eval包裹模块代码,转成字符串,编译更快|
+|soucce-map|产生.map文件|
+|cheap| 不包含列信息,也不包含loader的sourcemap|
+|module | 包含loader的sourcemap,否则无法定义的源文件|
+|inline| 将.map作为DataURL引入,不会单独生产.map文件 | 
+
+![](/images/sourcemap.png)
+
+缺少前面loader的sourcemap过程
+
+::: tip 提示 
+   :smiley: source-map包含行和列的信息,可以具体定位错误<br>
+            cheap-source-map 只包含行,不包含列,定位到一行错误<br>
+            开发环境推荐devtool:cheap-module-eval-source-map,没有列信息,但是快(eval),信息全(module)<br>
+            生产环境推荐'hidden-source-map'可以生成sourcemap文件给错误收集工具,又不会为bundle添加引入注释,以免浏览器使用,此时行内链接DataURL到本地环境,方便调试
+            折中使用eval-source-map 这是vue-cli使用的
+:::
+
+
+### 11 打包第三方类库
+
+#### 11.1 安装
+
+```js
+npm install lodash - D
+```
+
+
+#### 11.2 使用
+
+1. 直接引入,每次都要引入,很麻烦
+```js
+import _ from 'loadsh'
+alert(_.join(['a','b','c'],'_'))
+```
+2. 插件引入
+* webpack 配置providePlugin后,使用的时候无须import和require进行引入,直接使用即可
+* _函数会自动化添加到当前模块的上下文,无需显示声明
+
+
+```js
+ const webpack  = require('webpack')
+
+ plugins:[
+   new webapck.ProvidePlugin({
+     _:lodash
+   })
+ ]
+```
+此时全局下拿不到<br>
+安装expose-loader
+* 可以帮助我们把第三方类库挂载到window
+
+```js
+ module:{
+   rules:{
+     [
+       {
+         test:require.resolve('lodash'),
+         loader:'expose_loader',
+         options:{
+           exposes:{
+             globalName:'_',
+             override:true
+           }
+         }
+       }
+     ]
+   }
+ }
+
+
+```
+
+
+3.CDN引入,但是用不用到都会引入,需要手动插入
+如果我们通过CDN外链引入的方式引入了lodash库并且挂载到了_变量上
+```js
+ externals:{
+   lodash:'_'
+ }
+ ```
+
+
+```
+
+4.引入 html-webpack-externals-plugin实现按需加载,而且可以自动在html引入cdn
+
+```js
+
+const HtmlWebpackExternalsPlugin = require('html-webpack-externals-plugin')
+
+plugins:[
+  new HtmlWebpackExternalsPlugin({
+    externals:[
+      module:'lodash',
+      entry:  cnd地址,
+      global:'_'
+    ]
+  })
+]
+
+
+```
+
+### 12.开发环境和线上环境配置
+
+* 环境变量有二个变量,一个是在模块内部使用的变量(mode),一个是在node进程环境中使用的webpack.config.js使用的变量,二个互不影响
+  - 命令行配置
+  - 可以通过--mode=development来改变mode值
+  - 可以通过--env= development传参,传给webpack配置文件导出的函数参数
+
+```js
+ "script":{
+   "build::"webpack --mode=development"
+ }
+
+```
+
+* 如果在执行build,没有传--env==development,那么webpack导出的就拿不到参数,但是不影响mode,互不影响
+
+
+```js
+module.exports = (env) =>{
+  console.log(env) //underfined
+  return({
+     devtool:'hidden-source-map',
+     entry:'/src/index.js',
+     ;;;
+  })
+}
+
+```
+
+* 但是传了全局也拿不到这个东西此时我们需要借助插件
+
+
+```js
+plugins:[
+  new webpack.DefinePlugin({
+    DEVELOPMENT:"true",
+    ......
+  })
+]
+
+
+```
+
+我们可以全局安装cross-env,解决全局变量问题
+
+```js 
+scripts:{
+  "build":"cross-env NODE_ENV=development webpack"
+}
+```
+
+
+### 13. 配置多入口
+
+```js
+const path = require('path')
+let pageRoot = path.resolve(__dirname,'src','pages');
+let pages = fs.readdirSync(pagesRoots);
+let htmlWebpackPlugin = []
+let entry = pages.reduce((entry,filename) =>{
+  let entryName = path.basename(filename,'js')
+  entry[entryName] = path.join(pageRoot,filename);
+  htmlWebpackPlugin.push(new HtmlWebpackPlugin({
+    template:'./src/index/html',
+    filename:`${entryName}.html`,
+    //设置多页面默认入口
+    // filename:`${entryName === 'page?':'index.html':entryName }.html`
+    chunks:[entryName],//一个模块相互依赖组成了chunk
+    minify:{
+      collapseWhitespace:true,//开启压缩
+      removeComments:true
+    }
+  }))
+},{})
+
+
+
+
+```
+
+
+### 14.hash
+* 入口模块依赖的模块组成了一个chunk
+* 文件指纹,是指打包后输出文件的文件名和后缀
+* hash一般是结合CDN缓存来使用的,通过webpack构建之后,生成对应文件名自动带上对应的MD5值,如果文件改变,那么对应文件的hash值也会改变,对应html引出的url地址也会改变,触发CDN服务器从源服务器上拉取对应数据,进而更新本地缓存
+
+|  占位符  |   含义  | 
+|:-------:|:-------:|
+| ext | 资源后缀名 |
+|name | 文件名称|
+|hash | 每次webpack构建生成的唯一hash值 | 
+| chunkhash | 每次根据chunk生成的hash值,来源自同一个chunk,则hash值一样,没有依赖的部分就能缓存,不会重新构建,只要是一个chunk的css和js改变,则会改变 | 
+| contenthash | 根据内容生成的hash值,文件内容相同hash相同,文件改变才会改变 | 
+
+* 如果内容变化快,建议hash,单入口
+* 如果需要多个入口,建议chunkhash
+* 长期缓存,内容变化不大,建议contenthash
