@@ -373,7 +373,10 @@ module:{
 
 ### 8.支持js
 * babel-loader使用Babel和webpack转义js文件
-* <font color="blue">@babel/@babel/core</font>是Babel编译的核心包
+* <font color="blue">@babel/@babel/core</font>是Babel编译的核心包,还有核心API,比如transform,parse,babel/code本身生产语法树,遍历语法树,生成新代码,不负责转换语法树,
+* <font color="blue">babel-types</font>负责构造,验证以及变换AST节点的方式,对编写AST逻辑有效
+* <font color="blue">babel-template</font>可以将普通字符串转成AST,提供更便捷实用
+* <font color="blue">babel-traverse</font>用于AST遍历,维护整棵树状态,负责替换,移除和添加节点
 * <font color="blue">@babel/@babel/present-env</font>为每一个环境的预设,只能转换js语法
 * <font color="blue">@babel/plugin-proposal-decorators</font>把类和对象装饰器编译成ES5
 * <font color="blue">@babel/plugin-proposal-class-properties</font>转换静态类属性以及使用属性初始值语法声明的属性
@@ -834,3 +837,364 @@ let entry = pages.reduce((entry,filename) =>{
 * 如果内容变化快,建议hash,单入口
 * 如果需要多个入口,建议chunkhash
 * 长期缓存,内容变化不大,建议contenthash
+
+
+## webpack 底层原理
+
+### 1. webpack同步打包文件分析
+
+#### 1.1 准备工作
+
+* 模块的ID : 不管你是用什么样的路径来加载,最终模块的ID会变成相对根目录的相对路径
+
+
+
+``` html
+ - index.js => ./src/index.js
+ - title.js => ./src/title.js
+```
+
+#### 1.2 过程分析
+
+```js
+(() =>{
+// title.js 源代码
+ var module = {
+   './src/title.js':(module) =>{
+     module.export = 'title'
+   }
+ }
+ 
+  var cache = {};
+
+  function require(moduleId){
+    if(cache[moduleId]) { //先看缓存里面有没有已经缓存的模块对象
+    return cache[moduleId].exports //如果有直接返回
+   }
+   var module = {
+     exports:{}
+   }
+   cache[moduleId] = module //代码执行时候会给module.exports赋值
+   //执行module里面的函数
+    modules[moduleId].call(module.exports,module,module.exports,require);
+    return module.exports //执行返回执行的exports就行了
+  }
+ // 主入口文件代码
+ (() =>{
+   let title = require('./title');
+   console.log(title)
+
+ })()
+
+
+})()
+
+```
+
+### 2. webpack模块的兼容处理
+
+* 主入口加载不同的模块
+
+#### 2.1  commom.js加载commom.js
+
+* 内容是上面webpack同步打包文件分析
+
+#### 2.2 commom.js加载ES6 Modules
+* index.js
+```js
+  let title = require('./title');
+   console.log(title)
+```
+
+* title.js
+```js
+  exports.default "title.name";
+  export const age = "title.age"
+```
+```js
+(() =>{
+// title.js 源代码
+ var module = {
+   './src/title.js':(module,exports,require) =>{
+     // 代码有import 或者export webpack认定为es module
+    // 不管是common.js 还是es module 最后都会编译成commom.js,如果原来是es module的话
+    //就把expoets传给r方法处理一下,exports._esModule = true,以后通过这个属性判断原来是不是es6 模块
+     module.export = 'title'
+
+     require.r(exports) // 标识es6模块
+     require.d(exports,{
+       default:() => DEFAULT_EXPORT,
+       age:() => 'age',
+     })
+     const DEFAULT_EXPORT = 'title.name'
+     const age  = 'title.age'
+   }
+ }
+ 
+  var cache = {};
+
+  function require(moduleId){
+    if(cache[moduleId]) { 
+    return cache[moduleId].exports 
+   }
+   var module = {
+     exports:{}
+   }
+   cache[moduleId] = module 
+
+    modules[moduleId].call(module.exports,module,module.exports,require);
+    return module.exports 
+  }
+
+
+
+  //新增方法r
+   require.r = (exports) =>{
+     // 这样通过打印 Object.prototype.call(exports); [object Module]
+     // Symbol.toStringTag：在该对象上面调用Object.prototype.toString方法时，如果这个属性存在，它的返回值会出现在toString  方法返回的字符串之中，表示对象的类型
+    //  class Person {
+    //     get [Symbol.toStringTag]() {
+    //         return 'Person';
+    //     }
+    //   }
+    //   let p1 = new Person;
+    //   console.log(Object.prototype.toString.call(p1)); //"[object Person]"
+
+                           //目标对象     //属性          //值
+     Object.defineProperty(exports,Symbol.toStringTag,{value:'module'})  //此操作就是赋值exports._esModule = true
+   }
+   
+  // 新增方法d
+  //循环转换成export 
+  require.d = (exports,definition) =>{
+    fo(let key in definition){
+      //exports[key] = definition[key]
+      //exports.age ...
+      Object.defineProperty(exports,key,{enumerable:true,get:definition[key]})
+    }
+  }
+ 
+
+
+
+
+ (() =>{
+   let title = require('./title');
+   console.log(title)
+
+ })()
+
+
+})()
+
+```
+
+::: tip 提示
+ 为什么webpack 打包声明的方法用一个字母?其他的名字很长 <br>
+  减小文件体积
+  原因是因为一般名称都能被压缩打包,但是对象的属性是不能被压缩的
+
+
+:::
+
+#### 2.3 ES6 Modules加载ES6 Modules
+
+* 都分别处理一下,用r方法和d方法
+
+
+
+#### 2.4 ES6 Modules加载commom.js
+```js
+//index.js新增方法n处理
+ require.n = (exports) =>{
+   var getter  = exports._esModule ? () => exports.default : () => exports
+   return getter
+ }
+
+```
+
+### 3. AST抽象语法树
+
+* webpack是通过抽象语法树来实现对代码的检查和分析等操作
+* 用途
+  - 代码语法的检查,格式化等等
+  - 代码混淆压缩
+  - 不同代码规范质检的转换,jsx,ts转换成js
+
+* 原理: 通过javaScript Parse把代码转成抽象语法书,这棵树定义代码结构,通过操作可以精准定位声明语句,运算等等对代码分析优化
+   - 第一步先分词,把关键词转换成一个个token(词法分析)
+   - 第二步转成抽象语法树(语法分析)
+
+
+#### 3.1 JavaScript Parser
+
+* JavaScript Parser,把js源码抓换成抽象语法树的解析器
+* 浏览器会把js源码通过解析器转为抽象语法树,再进一步转换成字节码或者直接生成机器码
+
+#### 3.2 常用的JavaScript Parser   esprima
+
+* 通过<font color="red">esprima</font>把源码转换成AST
+* 通过<font color="red">estraverse</font>遍历更新AST
+* 通过<font color="red">escodegen</font>将AST重新生成源码
+* [astexplorer](https://astexplorer.net/)  AST的可视化工具
+
+
+#### 3.3 安装
+
+```js
+cnpm i esprima estraverse escodegen -S
+
+```
+#### 3.4 使用
+
+
+```js
+let esprima = require("esprima") //把源码转成抽象语法树
+let estraverse = require("estraverse") 
+let escodegen = require("escodegen")
+
+let soureCode = `function ast(){}`
+let ast = esprima.parse(soureCode)
+let indent = 0
+const padding = () => " ".repeat(indent)
+
+
+//遍历语法树,深度优先
+//如果一个遍历节点完成,同时有儿子和弟弟,如果先遍历弟弟,就是广度,先遍历儿子,就是深度
+estraverse.traverse(ast,{
+    enter(node){
+      console.log(padding() + '进入' + node.type)    
+      indent += 2         
+    },
+    leave(node){
+     indent -= 2   
+     console.log(padding() + '离开' + node.type)       
+           
+    }
+})
+
+
+let original = escodegen.generate(ast)
+console.log(original)
+
+
+```
+
+### 4.实现箭头函数转换
+
+* 利用插件babelPluginTransformEs2015ArrowFunctions
+
+#### 4.1 安装
+```js
+cnpm i babel-plugin-transform-es2015-arrow-functions -D
+```
+
+#### 4.2 使用
+```js
+
+
+let core = require('@babel/core')
+let types = require('babel-types')
+let babelPluginTransformEs2015ArrowFunctions = require('babel-plugin-transform-es2015-arrow-functions')
+
+ const sourceCode = `
+  const sum = (a,b)=>{
+      console.log(this)
+      return a+b;
+  }
+`
+//babel-code本身只用来生成语法树,遍历语法树,不负责转换语法树
+let targetCode = core.transform(sourceCode,{
+    plugins:[babelPluginTransformEs2015ArrowFunctions]
+})
+
+console.log(targetCode.code)
+
+// var _this = this;
+
+// const sum = function (a, b) {
+//   console.log(_this);
+//   return a + b;
+// };
+
+
+```
+
+
+#### 4.3 手动实现babel-plugin-transform-es2015-arrow-functions
+
+
+```js
+
+let core = require('@babel/core')
+let types = require('babel-types')
+
+
+ const sourceCode = `
+const sum = (a,b)=>{
+    console.log(this)
+    return a+b;
+}
+`
+//babel 插件是一个对象,它会有一个vistor访问器
+let babelPluginTransformEs2015ArrowFunctions2 = {
+    visitor:{
+       ArrowFunctionExpression(nodePath){ //参数是节点数据
+          let node = nodePath.node //获取路径节点
+          debugger
+          const thisBinding = hoistFunctionEnvironment(nodePath);
+         
+          node.type = 'FunctionExpression'
+       } 
+    }
+}
+
+
+
+function getScopeInfoInformation(fnPath){
+     let thisPaths = []
+     fnPath.traverse({ //遍历当前的path所有子节点,看看谁的类型是ThisExpression
+         ThisExpression(thisPath){
+            thisPaths.push(thisPath)
+         }
+     })
+     return thisPaths
+}
+function hoistFunctionEnvironment(fnPath){
+
+    //thisEnvFn==Program,找到根节点
+   const thisEnvFn = fnPath.findParent( p =>{
+       return (p.isFunction() && !p.isArrowFunctionExpression) || p.isProgram()
+   })
+ 
+//    console.log(thisEnvFn)
+
+   //thisPaths放着哪些地方用到this
+   let thisPaths = getScopeInfoInformation(fnPath)
+   let thisBinding = '_this';
+   if(thisPaths.length > 0){
+       //在父节点作用域添加一个变量id _this,初始值   this => thisExpression
+    thisEnvFn.scope.push({
+        id:types.identifier(thisBinding),
+        init:types.thisExpression()
+    })
+   }
+   //遍历所有用到this路径节点,把所有thisExpression变成_this标识符
+   thisPaths.forEach(thisChild =>{
+       let thisRef = types.identifier(thisBinding)
+       thisChild.replaceWith(thisRef)
+   })
+
+
+}
+
+//babel-code本身只用来生成语法树,遍历语法树,不负责转换语法树
+let targetCode = core.transform(sourceCode,{
+    plugins:[babelPluginTransformEs2015ArrowFunctions2]
+})
+
+console.log(targetCode.code)
+
+
+```
+
