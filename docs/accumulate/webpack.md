@@ -1198,3 +1198,186 @@ console.log(targetCode.code)
 
 ```
 
+### 5.webpack 工作流
+
+#### 5.1 webpack编译流程
+1. 初始化参数,从配置文件和shell语句中读取合并参数,得到最终的配置对象
+2. 用上一步的到的参数初始化Compiler对象
+3. 加载所有配置的插件
+4. 执行对象的run方法开始编译
+5. 根据配置中的entry找到入口文件
+6. 从入口文件出发,调用所有配置的loader对模块进行编译
+7. 再递归本步骤直到所有入口依赖的文件都经过本步骤处理(找到所有依赖)
+8. 根据入口和模块之间的关系,组装成一个个包装多个模块的chunk
+9. 确定好输出内容后,根据配置和输出路径和文件名,把内容写进文件系统
+
+```js
+let {Synchook} = require('tapable)
+const path = require('path)'
+const fs = require('fs');
+
+const parser = require('@/babel/parser'); //解析器 源代码转成AST抽象语法树
+const types = require("babel-types") //生成节点
+const traverse = require('@/babel/traverse') //遍历语法树器
+const generator = require("@/babel/generator").default //语法树重写生成代码
+
+//webpack内部用的是acorn
+
+class Compiler{
+  constructor(option){
+      this.option = option
+      this.hooks = {
+        run: new Synchook() //开始编译时候触发
+        done:new Synchook() //会在完成编译的时候触发
+      }
+  }
+  //4. 执行对象的run方法开始编译
+  run(){
+    let modules = []
+    this.hooks.run.call()//执行run方法的时候触发run钩子,进而执行它的回调函数
+
+  // 5. 根据配置中的entry找到入口文件
+   // context:process.cwd() 根目录
+   let entry = path.join(this.option.context,this.options.entry)
+
+     //6 从入口文件出发,调用所有配置的loader对模块进行编译
+   let  entryModule = buildModule(entry)
+   // 7.再递归本步骤直到所有入口依赖的文件都经过本步骤处理(找到所有依赖)
+   entryModule.dependencies.foreach(dependency =>{
+     let dependencyModule = this.buildModule(dependency)]
+     modules.push(dependencyModule)
+   })
+   //8. 根据入口和模块之间的关系,组装成一个个包装多个模块的chunk
+   let chunk = {name:'main',entryModule,module:this.modules};
+  //再把每个chunk转换成一个单独文件加入到输出列表
+   this.chunks.forEach(chunk =>{
+    //  this.assets[chunk.name + 'js'] = getsource(chunk) 假设只有一个chunk.后面就是内容
+   })
+   //9. 确定好输出内容后,根据配置和输出路径和文件名,把内容写进文件系统
+   for(let file in this.assets){
+     fs.writeFileSync(`./dist/${file}`,assets[file])
+   }
+   this.hooks.done.call()
+  }
+  buildModule(modulePath){
+   //读取原始代码
+   let originalSourceCode = fs.readFileSync(modulePath,'uft-8')
+   //查找loader对代码你进行转换
+   let rules = this.option.module.rules
+   let loaders = []
+   for( let i = 0; i < rules.length; i++){
+     //正则匹配上模块的路径
+     if(rules[i].test.test(modulePath){
+       loaders = [...loaders,...rules[i].use]
+     })
+   }
+   for(let i= loaders.length- 1 ; i>=0; i--){
+     let loader = loader[i]
+     //loader函数
+    //  function loader(source){
+    
+    //   }
+  
+     //把上一个loader处理结果交给下一个loader
+     let  targetSourceCode = require(loader)(targetSourceCode)
+     let baseDir = process.cwd().replace(/\\/g,'/')
+     //现在已经得到转换后的代码 babel-loader es6 =>es5
+     //再找出该模块依赖的模块,再递归本步骤之道所有入口依赖的文件都经过了本步骤的处理
+     let moduleId = './' + path.posix.relative(baseDir,modulePath)
+       let module = {id:moduleId,dependenices:[]};
+     let  astTree = parse.parse(targetSourceCode,{sourceType:'module'});
+     traverse(astTree,{
+       CallExpression({node}){
+         if(node.callee.name === 'require'){
+            let moduleName = node.argument[0].value
+            let dirname = path.posix.dirname(modulePath)
+            let depModulePath = path.posix.join(dirname,moduleName);
+            let extnsion = this.options.reslove.extension
+             depModulePath = tryExtensions(depModulePath,extensions,moduleName,dirname)
+             //模块Id问题
+             let depModuleId = './' + path.posix.relative(baseDir,depModulePath)
+             //修改抽象语法树
+             node.arguments = [types.stringLiteral(depModuleId)]
+             module.dependencies.push(depModulePath)
+         }
+       }
+     })
+     //根据新的语法树生成新代码
+     let {code} = generator(astTree)
+     module._souce = code
+   }
+  }
+  //模块id是此模块绝对路径相当于根目录的相对路径
+  function tryExtensions(modulePath,extensions,originalModulePath,moduleContext){
+    for(let i = 0; i < extension.length; i++){
+       if(fs.existSync(modulePath+extension[i])){
+         return modulePath+extension[i]
+       }
+    }
+  }
+}
+module.exports = Compiler
+
+```
+
+* 插件
+```js
+class DonePlugin{
+  constructor(options){
+    this.options = options
+  }
+
+  apply(compiler){
+    //注册监听感兴趣的钩子
+     compiler.hooks.run.tap('DonePlugin',() =>{
+       console.log('111')
+     })
+    //   compiler.hooks.done.tap('DonePlugin',() =>{
+    //    console.log('111')
+    //  })
+  }
+}
+module.exports = DonePlugin
+
+```
+
+```js
+let Compiler = require('./Compiler)
+function webpack(option){
+ //初始化参数,从配置文件和shell语句中读取和合并参数,得到最终的配置对象
+ // process.argv 命令行参数 数组 ( 1.node.exe绝对路径 , 2.脚本路径,   3.参数--mode=***,)
+ process.argv.slice(2).reduce((shellConfig,item) =>{
+   let [key,value] = item.split("=")  //--mode=development
+   shellConfig[key.slice(2)] = value
+   return shellConfig
+ },{})
+ let finalOption = {...option,...shellConfig}
+
+  //2. 用上一步的到的参数初始化Compiler对象
+  let compiler = new Compiler(finalOption)
+
+ // 3. 加载所有配置的插件(一开始就挂载了)
+ //执行是找到对应的钩子才会执行
+   if(finalOption.plugins && Array.isArray(inalOption.plugins)){
+     for(let plugin of finalOption.plugins){
+       plugin.apply(Compiler)
+     }
+   }
+  return compiler
+}
+module.exports = webpack
+
+
+```
+
+```js
+const webpack = require('./webapck')
+const option = require('./webpack.config')
+//执行webpack得到核心编译对象Compiler,就是一个大管理,是核心编译对象
+const  compiler = webpack(option);
+compiler.run()
+
+```
+
+
+
