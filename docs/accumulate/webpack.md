@@ -1379,5 +1379,90 @@ compiler.run()
 
 ```
 
+### 6.loader-runer
+
+* 所谓loader只是一个导出为函数的js模块,它接受上一个loader产生的结果或者资源文件作为入参,也可以用多个loader函数组成loader chain
+* compiler需要得到最后一个loader产生的处理结果,这个结果应该是String或者Buffer(被转换为一个string)
+
+#### 6.1 loader-runner
+
+* loader-runner是一个执行loader链条的模块
+* loader的叠加顺序 = post(后置) + inline(内联) + normal(正常) + pre(前置)
+
+
+
+```js
+const fs = require('fs');
+const {runLoaders} = require("loader-runner");
+const path = require('path');
+let resource = path.resolve(__dirname,'src','index.js');
+let loaders = [
+    path.resolve(__dirname,'loaders','inline-loader1.js'),
+    path.resolve(__dirname,'loaders','normal-loader2.js'),
+]
+runLoaders({
+    resource,
+    loaders,
+    context:{},
+    readResource:fs.readFile.bind(fs)
+
+},function(err,result){
+    console.log(result)
+})
+
+
+```
+
+![](/images/loader.jpg)
+
+
+#### 6.2 pitch
+
+* 正确调用应该是a(pitch),b(pitch),c(pitch),c,b,a,任何一个值在pitching loader执行返回值了,后面的loader 都不再执行了
+* style-loader内部的实现就是利用pitch,如下图
+
+![](/images/style-loader.jpg)
+
+
+### 7. babel-loader
+
+```js
+
+//babel-loader.js
+ const core = require('@babel/core')
+ const path = require("path")
+
+ function loader(source,inputSourceMap,data){
+   const option = {
+     presets:["@babel/present-env"],
+     inputSourceMap,
+     souceMaps:true,//告诉babel要生成sourceMap
+     filename:path.basename(this,resourcePath)
+   }
+    let {code,map,ast} = core.transform(source,options);
+    return this.callback(null,code,map,ast)
+ }
+
+ nodule.exports = loader
+
+ //当你需要返回多值 的时候需要使用this.callback传递多个值
+ //需要返回一个值,可以直接return
+ //map可以测试调试,debug可以看到源代码
+ //ast 如果返回ast给webapck,webpack可以直接分析,不需要转AST
+// data可以给loader绑定一些数据的
+
+  //在webpack.config.js配置
+
+  resolveLoader:{
+    alias:{
+      'babel-loader':resolve('./loaders/babel-loader.js')
+    }
+  }
+  rules:{
+    ...
+    include:path.resolve('src')
+  }
+
+```
 
 

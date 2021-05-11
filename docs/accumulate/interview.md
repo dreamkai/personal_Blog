@@ -824,3 +824,20 @@ function createRequest(tasks,pool){
     return Promise.all(together).then((results) =>results)
 }
 ```
+
+### 十. 经典闭包面试题
+
+```js
+ var a = 1
+  if(true){
+    a = 1;
+    function a(){}
+    a = 21;
+    console.log(a) // 21
+  }
+  console.log(a) //1
+
+```
+* 在IE老版本中,答案为21,21,老版本浏览器会提升函数整体
+* 新版本提升函数名,且在处理有function,let,const 默认形成块级作用域
+* 为了兼容老版本,在function之前的会在window映射一份,不管是老版本和新版本函数都提升阶段会提升到全局
