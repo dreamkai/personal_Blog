@@ -273,3 +273,8 @@ console.log(Object.prototype.toString.call(p1)); //"[object Person]"
   //5*1 + 15*16 + 10*16*16 + 2*16*16*16 = 10997
 
 ```
+
+
+## js数据结构和算法
+
+
